@@ -17,8 +17,8 @@ class TestLexRank(unittest.TestCase):
     def test_summarized(self):
         self.lexrank.summarize(self.text)
         summaries = self.lexrank.probe()
-        self.assertEqual(len(summaries), 3)
-        self.assertEqual(summaries[0], "사과 배 감 귤")
+        self.assertEqual(len(summaries), 2)
+        self.assertEqual(summaries[0], "배 감 귤 수박")
 
 
 if __name__ == '__main__':

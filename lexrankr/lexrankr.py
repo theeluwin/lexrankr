@@ -12,7 +12,7 @@ from stopwords import stopwords as stopwords_ko
 from collections import Counter
 from gensim.corpora import Dictionary, TextCorpus
 from gensim.models import TfidfModel
-from sklearn.cluster import Birch
+from sklearn.cluster import Birch, DBSCAN, AffinityPropagation
 from sklearn.feature_extraction import DictVectorizer
 from mcl.mcl_clustering import mcl
 
@@ -23,11 +23,11 @@ class LexRankError(Exception):
 
 class Sentence(object):
 
-    def __init__(self, text, keywords=[], index=0):
+    def __init__(self, text, tokens=[], index=0):
         self.index = index
         self.text = text
-        self.keywords = keywords
-        self.counter = Counter(self.keywords)
+        self.tokens = tokens
+        self.counter = Counter(self.tokens)
 
     def __unicode__(self):
         return self.text
@@ -50,7 +50,7 @@ class Sentence(object):
 
 class SentenceFactory(object):
 
-    def __init__(self, tagger, useful_tags, delimiters, min_keyword_length, stopwords, **kwargs):
+    def __init__(self, tagger, useful_tags, delimiters, min_token_length, stopwords, **kwargs):
         if tagger == 'twitter':
             self.tagger = taggers.Twitter()
             self.tagger_options = {
@@ -83,7 +83,7 @@ class SentenceFactory(object):
         self.useful_tags = useful_tags
         self.delimiters = delimiters
         self.stopwords = stopwords
-        self.min_keyword_length = min_keyword_length
+        self.min_token_length = min_token_length
         self.splitter = self.splitterer()
         self.pos = lambda text: self.tagger.pos(text, **self.tagger_options)
 
@@ -91,16 +91,16 @@ class SentenceFactory(object):
         escaped_delimiters = '|'.join([re.escape(delimiter) for delimiter in self.delimiters])
         return lambda value: re.split(escaped_delimiters, value)
 
-    def text2keywords(self, text):
-        keywords = []
+    def text2tokens(self, text):
+        tokens = []
         word_tag_pairs = self.pos(text)
         for word, tag in word_tag_pairs:
             if word in self.stopwords:
                 continue
             if tag not in self.useful_tags:
                 continue
-            keywords.append("{}/{}".format(word, tag))
-        return keywords
+            tokens.append("{}/{}".format(word, tag))
+        return tokens
 
     def text2sentences(self, text):
         candidates = self.splitter(text.strip())
@@ -111,10 +111,10 @@ class SentenceFactory(object):
                 candidate = candidate.strip(' ').strip('.')
             if not candidate:
                 continue
-            keywords = self.text2keywords(candidate)
-            if len(keywords) < self.min_keyword_length:
+            tokens = self.text2tokens(candidate)
+            if len(tokens) < self.min_token_length:
                 continue
-            sentence = Sentence(candidate, keywords, index)
+            sentence = Sentence(candidate, tokens, index)
             sentences.append(sentence)
             index += 1
         return sentences
@@ -128,16 +128,16 @@ class SentenceCorpus(TextCorpus):
         self.dictionary = Dictionary(self.get_texts(), prune_at=max_size)
         self.dictionary.filter_extremes(no_below=no_below, no_above=no_above, keep_n=max_size)
         self.dictionary.compactify()
-        self.bows = [self.dictionary.doc2bow(keywords) for keywords in self.get_texts()]
+        self.bows = [self.dictionary.doc2bow(tokens) for tokens in self.get_texts()]
 
     def get_texts(self):
         for sentence in self.sentences:
-            yield sentence.keywords
+            yield sentence.tokens
 
 
 class LexRank(object):
 
-    def __init__(self, similarity='jaccard', decay_window=15, decay_alpha=0.5, clustering='birch', tagger='twitter', useful_tags=['Noun', 'Verb', 'Adjective'], delimiters=['. ', '\n', '.\n'], min_keyword_length=2, stopwords=stopwords_ko, no_below_word_count=3, no_above_word_portion=0.8, max_dictionary_size=None, min_cluster_size=3, similarity_threshold=0.8, matrix_smoothing=False, birch_threshold=0.05, birch_branching_factor=15, compactify=True, **kwargs):
+    def __init__(self, similarity='jaccard', decay_window=15, decay_alpha=0.5, clustering='birch', tagger='twitter', useful_tags=['Noun', 'Verb', 'Adjective'], delimiters=['. ', '\n', '.\n'], min_token_length=2, stopwords=stopwords_ko, no_below_word_count=3, no_above_word_portion=0.8, max_dictionary_size=None, min_cluster_size=3, similarity_threshold=0.8, matrix_smoothing=False, n_clusters=None, compactify=True, **kwargs):
         self.decay_window = decay_window
         self.decay_alpha = decay_alpha
         if similarity == 'cosine':  # very, very slow :(
@@ -145,17 +145,25 @@ class LexRank(object):
             self.uniform_sim = self._sim_cosine
         elif similarity == 'jaccard':
             self.uniform_sim = self._sim_jaccard
+        elif similarity == 'normalized_cooccurrence':
+            self.uniform_sim = self._sim_normalized_cooccurrence
         else:
-            raise LexRankError("available similarity functions are: cosine, jaccard")
+            raise LexRankError("available similarity functions are: cosine, jaccard, normalized_cooccurrence")
         self.sim = lambda sentence1, sentence2: self.decay(sentence1, sentence2) * self.uniform_sim(sentence1, sentence2)
-        self.factory = SentenceFactory(tagger=tagger, useful_tags=useful_tags, delimiters=delimiters, min_keyword_length=min_keyword_length, stopwords=stopwords, **kwargs)
+        self.factory = SentenceFactory(tagger=tagger, useful_tags=useful_tags, delimiters=delimiters, min_token_length=min_token_length, stopwords=stopwords, **kwargs)
         if clustering == 'birch':
-            self._birch = Birch(threshold=birch_threshold, branching_factor=birch_branching_factor)
-            self._clusterer = lambda matrix: self._birch.fit_predict(matrix)
+            self._birch = Birch(threshold=0.99, n_clusters=n_clusters)
+            self._clusterer = lambda matrix: self._birch.fit_predict(1 - matrix)
+        elif clustering == 'dbscan':
+            self._dbscan = DBSCAN()
+            self._clusterer = lambda matrix: self._dbscan.fit_predict(1 - matrix)
+        elif clustering == 'affinity':
+            self._affinity = AffinityPropagation()
+            self._clusterer = lambda matrix: self._affinity.fit_predict(1 - matrix)
         elif clustering == 'markov':  # not working well :(
             self._clusterer = lambda matrix: (lambda A: mcl(A, expand_factor=1, inflate_factor=1, mult_factor=0))(matrix)[1]
         elif clustering == None:
-            self._clusterer = lambda matrix: [0 for index in matrix.shape[0]]
+            self._clusterer = lambda matrix: [0 for index in range(matrix.shape[0])]
         else:
             raise LexRankError("available clustering algorithms are: birch, markov, no-clustering(use `None`)")
         self.no_below_word_count = no_below_word_count
@@ -198,6 +206,11 @@ class LexRank(object):
         sentence2_tfidf = {word_id: tfidf for word_id, tfidf in sentence2.tfidf}
         vector1, vector2 = self.vectorizer.fit_transform([sentence1_tfidf, sentence2_tfidf]).toarray()
         return vector1.dot(vector2)
+
+    def _sim_normalized_cooccurrence(self, sentence1, sentence2):
+        if sentence1 == sentence2:
+            return 1
+        return len(set(sentence1.tokens) & set(sentence2.tokens)) / (math.log(len(sentence1.tokens)) + math.log(len(sentence2.tokens)))
 
     def decay(self, sentence1, sentence2):
         distance = abs(sentence1.index - sentence2.index)
@@ -266,8 +279,8 @@ class LexRank(object):
         self.clusters = clusters
         self._clustered()
 
-    def _verbose(self, summaries):
-        summaries = sorted(summaries, key=lambda sentence: sentence.index)
+    def _verbose(self):
+        summaries = sorted(self.summaries, key=lambda sentence: sentence.index)
         return [sentence.text for sentence in summaries]
 
     def probe(self, k=None):
@@ -281,19 +294,19 @@ class LexRank(object):
             raise LexRankError("this will not give a summarization")
         if k < 1:
             k = int(self.num_sentences * k)
-        summaries = []
+        self.summaries = []
         ends = np.array([len(cluster) for cluster in self.clusters])
         drones = np.zeros(ends.shape)
         for i in range(self.num_clusters):
-            summaries.append(self.clusters[i][0])
+            self.summaries.append(self.clusters[i][0])
             drones[i] += 1
-            if len(summaries) == k:
-                return self._verbose(summaries)
+            if len(self.summaries) == k:
+                return self._verbose()
         while True:
             branch = np.array([drones + 1, ends]).min(axis=0) / ends
             leach = int(branch.argmin())
             drone = int(drones[leach])
-            summaries.append(self.clusters[leach][drone])
+            self.summaries.append(self.clusters[leach][drone])
             drones[leach] += 1
-            if len(summaries) == k:
-                return self._verbose(summaries)
+            if len(self.summaries) == k:
+                return self._verbose()
