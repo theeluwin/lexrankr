@@ -137,7 +137,7 @@ class SentenceCorpus(TextCorpus):
 
 class LexRank(object):
 
-    def __init__(self, similarity='jaccard', decay_window=15, decay_alpha=0.5, clustering='birch', tagger='twitter', useful_tags=['Noun', 'Verb', 'Adjective'], delimiters=['. ', '\n', '.\n'], min_token_length=2, stopwords=stopwords_ko, no_below_word_count=3, no_above_word_portion=0.8, max_dictionary_size=None, min_cluster_size=3, similarity_threshold=0.8, matrix_smoothing=False, n_clusters=None, compactify=True, **kwargs):
+    def __init__(self, similarity='cosine', decay_window=20, decay_alpha=0.25, clustering='dbscan', tagger='twitter', useful_tags=['Noun', 'Verb', 'Adjective', 'Determiner', 'Adverb', 'Conjunction', 'Josa', 'PreEomi', 'Eomi', 'Suffix', 'Alpha', 'Number'], delimiters=['. ', '\n', '.\n'], min_token_length=2, stopwords=stopwords_ko, no_below_word_count=2, no_above_word_portion=0.85, max_dictionary_size=None, min_cluster_size=2, similarity_threshold=0.85, matrix_smoothing=False, n_clusters=None, compactify=True, **kwargs):
         self.decay_window = decay_window
         self.decay_alpha = decay_alpha
         if similarity == 'cosine':  # very, very slow :(
