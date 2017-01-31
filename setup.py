@@ -13,7 +13,6 @@ requirements = [
     'konlpy',
     'scipy',
     'numpy',
-    'Pattern',
     'gensim',
     'sklearn',
     'MCL_Markov_Cluster',
