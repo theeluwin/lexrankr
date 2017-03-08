@@ -15,7 +15,6 @@ requirements = [
     'numpy',
     'gensim',
     'sklearn',
-    'MCL_Markov_Cluster',
 ]
 if sys.version_info < (3, ):
     requirements.append('jpype1')
@@ -24,7 +23,7 @@ else:
 
 setup(
     name='lexrankr',
-    version='0.1.3',
+    version='0.1.4',
     license='MIT',
     author='Jamie Seol',
     author_email='theeluwin@gmail.com',
