@@ -289,7 +289,7 @@ class LexRank(object):
             k = max(2, self.num_clusters)
         if k < 0:
             raise LexRankError("appropriate value for `k`: float(0 ~ 1) for compress rate, or natural number for exact number of sentences")
-        if k >= self.num_sentences:
+        if k > self.num_sentences:
             raise LexRankError("this will not give a summarization")
         if k < 1:
             k = int(self.num_sentences * k)
