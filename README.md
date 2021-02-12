@@ -1,6 +1,6 @@
 # lexrankr
 
-[![Build Status](https://travis-ci.org/theeluwin/lexrankr.svg?branch=main)](https://travis-ci.org/theeluwin/lexrankr)
+[![Build Status](https://travis-ci.com/theeluwin/lexrankr.svg?branch=main)](https://travis-ci.com/theeluwin/lexrankr)
 [![Coverage Status](https://coveralls.io/repos/github/theeluwin/lexrankr/badge.svg?branch=main)](https://coveralls.io/github/theeluwin/lexrankr?branch=main)
 [![PyPI version](https://badge.fury.io/py/lexrankr.svg)](https://badge.fury.io/py/lexrankr)
 
